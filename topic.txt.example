@@ -1,1 +1,6 @@
+# One research topic per line.
+# Lines starting with # are ignored.
+# Each topic gets its own run, completed before the next one starts.
+
 What are the long-term macroeconomic effects of universal basic income?
+What are the most promising recent advances in solid-state battery technology?

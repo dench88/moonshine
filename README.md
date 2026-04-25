@@ -54,16 +54,36 @@ python init_db.py
 
 This creates `topic_loop.db` in the project directory.
 
-### 4. Make sure Ollama is running
+### 4. Set up your secrets file
+
+API keys are loaded from `~/.secrets.env` at startup. Create it once:
+
+```bash
+touch ~/.secrets.env
+chmod 600 ~/.secrets.env   # owner-only read/write
+```
+
+Then add the keys you need (see `.secrets.env.example` for the full list):
+
+```
+TAVILY_API_KEY=tvly-...
+ANTHROPIC_API_KEY=sk-ant-...    # only if using an Anthropic model
+OPENAI_API_KEY=sk-...           # only if using an OpenAI model
+DEEPSEEK_API_KEY=sk-...         # only if using a DeepSeek model
+```
+
+Keys already set in your shell environment always take precedence over the file.
+
+### 5. Make sure Ollama is running (if using local models)
 
 ```bash
 ollama serve
-ollama pull gpt-oss:20b   # or whatever model you use
+ollama pull gpt-oss:20b   # or whichever local model you want
 ```
 
-Check the model name and URL in `config.py`.
+Check `RESEARCHER_MODEL` and `SYNTHESISER_MODEL` in `config.py`.
 
-### 5. Set your research topic
+### 6. Set your research topics
 
 `topic.txt` is gitignored to keep your topics private. Copy the example and edit it:
 
@@ -71,60 +91,110 @@ Check the model name and URL in `config.py`.
 cp topic.txt.example topic.txt
 ```
 
-Then edit `topic.txt` with your research question — one question per file:
+Add one research question per line. Lines starting with `#` are comments and are ignored:
 
 ```
+# My overnight research queue
+
 What are the long-term macroeconomic effects of universal basic income?
+What are the most promising recent advances in solid-state battery technology?
 ```
+
+Each topic gets its own run, completed in full before the next one starts.
 
 ---
 
 ## Running
 
-### Start a new run
+### Run all topics in topic.txt
 
 ```bash
-python run_topic_loop.py
+python run.py
 ```
 
-### Resume after an interruption
+Runs each topic in `topic.txt` sequentially — one full run per topic, top to bottom. Each topic gets its own run ID, log file, notes file, and final report.
+
+### Choose models at runtime
+
+Use `--researcher` and `--synthesiser` to override the defaults in `config.py`:
 
 ```bash
-python run_topic_loop.py --resume
+python run.py --researcher gptoss --synthesiser claude
 ```
+
+**Available model aliases:**
+
+| Alias | Model | Where |
+|-------|-------|-------|
+| `gptoss` | `gpt-oss:20b` | Local (Ollama) |
+| `qwen` | `qwen2.5:32b` | Local (Ollama) |
+| `huihui` | `huihui_ai/glm-4.7-flash-abliterated:q4_K` | Local (Ollama) |
+| `claude` | `claude-sonnet-4-6` | Anthropic API |
+| `chatgpt` | `gpt-4o` | OpenAI API |
+| `deepseek` | `deepseek-chat` | DeepSeek API |
+
+You can also pass a full `provider/model-name` string if you want a model not in the alias list. Each role can use a different model — for example, use a fast local model for the Researcher and a stronger online model for the Synthesiser:
+
+```bash
+python run.py --researcher gptoss --synthesiser claude
+```
+
+### Resume an interrupted run
+
+```bash
+python run.py --resume
+```
+
+Resumes the most recent incomplete run (single topic). Once it completes it stops — it does not automatically continue to the next topic in `topic.txt`.
 
 ### Resume a specific run by ID
 
 ```bash
-python run_topic_loop.py --resume --run-id 3
+python run.py --resume --run-id 3
 ```
 
 ### Run with a custom cycle limit
 
 ```bash
-python run_topic_loop.py --max-cycles 60
+python run.py --max-cycles 60
 ```
+
+Applies to all topics in the current session.
 
 ---
 
 ## Outputs
 
-Working files are saved under `outputs/`:
+Every run gets a number (`N`). Your first run is run 1, second is run 2, and so on.
 
-| File | Contents |
-|------|----------|
-| `run_N_notes.md` | All accepted sources with summaries, key points, scores |
-| `run_N_draft.md` | Latest draft report (updated every cycle) |
+### Reading a completed run
 
-Final reports are saved under `outputs/reports/`:
+The quickest way to read results is the files written to disk:
 
-| File | Contents |
-|------|----------|
-| `run_N_final_report.md` | Final report written when the run completes |
+| File | Where | What it contains |
+|------|-------|-----------------|
+| `run_N_final_report.md` | `outputs/reports/` | The finished report — start here |
+| `run_N_notes.md` | `outputs/` | All accepted sources: summaries, key points, scores |
+| `run_N_draft.md` | `outputs/` | The last working draft (same content as the final report if the run completed) |
+| `logs/run_N.log` | `logs/` | Full log of everything that happened |
 
-Logs are saved under `logs/run_N.log`.
+For example, after your first run:
 
-The SQLite database `topic_loop.db` holds the full structured state, including the full extracted text of each accepted source.
+```
+outputs/reports/run_1_final_report.md   ← read this
+outputs/run_1_notes.md                  ← all your sources
+logs/run_1.log                          ← what happened
+```
+
+### Finding your run number
+
+If you're not sure which run number to look for:
+
+```bash
+sqlite3 topic_loop.db "SELECT id, topic, status, cycle_count, created_at FROM runs ORDER BY id DESC LIMIT 10;"
+```
+
+This lists your most recent runs with their topics and status (`running`, `completed`, or `failed`).
 
 ---
 
@@ -134,14 +204,27 @@ Edit `config.py` to change:
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `MODEL_NAME` | `gpt-oss:20b` | Ollama model to use |
+| `RESEARCHER_MODEL` | `ollama/gpt-oss:20b` | Model used by the Researcher role |
+| `SYNTHESISER_MODEL` | `ollama/gpt-oss:20b` | Model used by the Synthesiser role |
 | `OLLAMA_URL` | `http://localhost:11434` | Ollama server URL |
 | `MAX_CYCLES` | `40` | Cycles to run (40 cycles ≈ overnight) |
 | `SOURCES_PER_CYCLE` | `2` | Sources to accept per cycle |
 | `MIN_RELEVANCE_SCORE` | `3` | Minimum LLM relevance score (1–10) |
 | `MIN_QUALITY_SCORE` | `3` | Minimum LLM quality score (1–10) |
 | `SEARCH_PROVIDER` | `tavily` | Search backend (see below) |
+| `FETCH_TIMEOUT` | `8` | Seconds before giving up on a slow/blocking site |
 | `MAX_TEXT_CHARS` | `12000` | Characters to extract from each page |
+
+### Choosing a model
+
+Set `RESEARCHER_MODEL` and `SYNTHESISER_MODEL` in `config.py` using a short alias or a full `provider/model-name` string. See the alias table in the [Running](#running) section for the full list. Example:
+
+```python
+RESEARCHER_MODEL  = "gptoss"
+SYNTHESISER_MODEL = "claude"
+```
+
+You can also override both at runtime with `--researcher` and `--synthesiser` — see below.
 
 ---
 
@@ -151,10 +234,10 @@ The search layer lives in `search.py`. Set `SEARCH_PROVIDER` in `config.py` to o
 
 ### Tavily (recommended)
 
-Get an API key at https://tavily.com/, then:
+Get an API key at https://tavily.com/, add it to `~/.secrets.env`:
 
-```bash
-export TAVILY_API_KEY=your_key_here
+```
+TAVILY_API_KEY=tvly-...
 ```
 
 And in `config.py`:
@@ -163,26 +246,72 @@ And in `config.py`:
 SEARCH_PROVIDER = "tavily"
 ```
 
-### SearXNG (self-hosted)
+### SearXNG (self-hosted, free)
+
+SearXNG is a self-hosted meta-search engine. It aggregates Google, Bing, DuckDuckGo and others. No API key needed, but it requires a small one-time setup to enable the JSON API that Moonshine uses.
+
+#### Step 1 — Start SearXNG with Docker
 
 ```bash
-# Run SearXNG locally with Docker
-docker run -d -p 8080:8080 searxng/searxng
+docker run -d \
+  --name searxng \
+  -p 8080:8080 \
+  -e SEARXNG_SECRET_KEY="$(openssl rand -hex 32)" \
+  -v "$PWD/searxng-config:/etc/searxng" \
+  searxng/searxng
 ```
 
-Then in `config.py`:
+This creates a `searxng-config/` folder with default config files.
+
+#### Step 2 — Enable the JSON API
+
+SearXNG only serves HTML by default. Edit the generated config to add JSON:
+
+```bash
+# Open the settings file
+nano searxng-config/settings.yml
+```
+
+Find the `search:` section and add `json` to formats:
+
+```yaml
+search:
+  formats:
+    - html
+    - json
+```
+
+Save the file, then restart the container:
+
+```bash
+docker restart searxng
+```
+
+Verify it's working:
+
+```bash
+curl "http://localhost:8080/search?q=test&format=json" | head -c 200
+```
+
+You should see JSON output, not an error page.
+
+#### Step 3 — Configure Moonshine
+
+In `config.py`:
 
 ```python
 SEARCH_PROVIDER = "searxng"
 SEARXNG_URL = "http://localhost:8080"
 ```
 
+> **Note:** SearXNG does not return page content — only URLs, titles, and snippets. Moonshine will fetch each page directly. Sites that block bots (like McKinsey) will still time out. Use Tavily if this is a problem.
+
 ### Brave Search API
 
-Get an API key at https://api.search.brave.com/, then:
+Get an API key at https://api.search.brave.com/, add it to `~/.secrets.env`:
 
-```bash
-export BRAVE_API_KEY=your_key_here
+```
+BRAVE_API_KEY=...
 ```
 
 And in `config.py`:
@@ -196,6 +325,60 @@ SEARCH_PROVIDER = "brave"
 Add a function `_yourprovider_search(query, num_results) -> list[dict]` in
 `search.py` and register it in the `providers` dict at the top of `search()`.
 Each result dict needs `url`, `title`, and `snippet` keys.
+
+---
+
+## Browsing and searching past research
+
+Everything Moonshine collects — every source, summary, draft, and extracted web page — is stored in `topic_loop.db`. There are two ways to explore it.
+
+### Option 1: Visual browser (recommended for browsing)
+
+[Datasette](https://datasette.io/) gives you a web interface to browse and search the database with no SQL needed. It's already in `requirements.txt`.
+
+```bash
+datasette topic_loop.db
+```
+
+Then open **http://localhost:8001** in your browser. You'll see:
+
+- **runs** — all your research topics, with status and cycle count
+- **sources** — every web source collected, filterable by score or run
+- **drafts** — every draft report, one per cycle
+
+The search box at the top of each table searches the full text of that table — source summaries, titles, extracted page text, draft content — across all runs.
+
+### Option 2: Command-line search
+
+If you prefer the terminal, you can search directly:
+
+```bash
+# Find all sources mentioning a term (replace 'your search terms')
+sqlite3 topic_loop.db \
+  "SELECT s.title, s.url, s.relevance_score, r.topic
+   FROM sources s
+   JOIN sources_fts f ON s.id = f.rowid
+   JOIN runs r ON s.run_id = r.id
+   WHERE sources_fts MATCH 'your search terms'
+   ORDER BY rank;"
+
+# Find drafts mentioning a term
+sqlite3 topic_loop.db \
+  "SELECT d.run_id, d.cycle_number, r.topic
+   FROM drafts d
+   JOIN drafts_fts f ON d.id = f.rowid
+   JOIN runs r ON d.run_id = r.id
+   WHERE drafts_fts MATCH 'your search terms'
+   ORDER BY rank;"
+```
+
+### Rebuilding the search index
+
+The search index is updated automatically during each run. If you have data from before search indexing was added, or you've edited the database manually, rebuild it with:
+
+```bash
+python rebuild_fts.py
+```
 
 ---
 
@@ -217,23 +400,25 @@ sqlite3 topic_loop.db "SELECT cycle_number, stage, url, error_message FROM failu
 ## Architecture
 
 ```
-run_topic_loop.py   Main loop — orchestrates cycles, handles crashes gracefully
+run.py   Main loop — orchestrates cycles, handles crashes gracefully
 researcher.py       Researcher role — search, fetch, summarise, score, save
 synthesiser.py      Synthesiser role — integrate notes, improve draft, identify gaps
-ollama_client.py    Thin wrapper around Ollama HTTP API with retries
-search.py           Search abstraction — mock / SearXNG / Brave
+llm_client.py       Unified LLM dispatcher — routes to Ollama / Anthropic / OpenAI / DeepSeek
+search.py           Search abstraction — Tavily / SearXNG / Brave / mock
 fetcher.py          HTTP fetch + BeautifulSoup text extraction
 db.py               SQLite helpers — all reads and writes go through here
 prompts.py          All LLM prompt templates
 config.py           All configuration in one place
-init_db.py          One-time database schema creation
+init_db.py          One-time database schema creation (run once)
+rebuild_fts.py      Rebuild full-text search indexes from existing data
 ```
 
 ---
 
 ## Assumptions
 
-- Ollama is running locally and the configured model is already pulled.
+- If using a local model, Ollama is running and the model is already pulled (`ollama pull model-name`).
+- If using an online model, the relevant API key is set in `~/.secrets.env`.
 - With `SEARCH_PROVIDER = "mock"` the researcher pass accepts 0 sources per cycle
   (the system still runs and synthesises, but has no new material).
 - Page fetch uses a browser-like User-Agent; heavily JS-rendered pages will return

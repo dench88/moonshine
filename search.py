@@ -55,6 +55,7 @@ def _tavily_search(query: str, num_results: int) -> list[dict]:
                 "num_results": num_results,
                 "search_depth": "basic",
                 "include_answer": False,
+                "include_raw_content": True,
             },
             timeout=15,
         )
@@ -66,6 +67,7 @@ def _tavily_search(query: str, num_results: int) -> list[dict]:
                 "url": r.get("url", ""),
                 "title": r.get("title", ""),
                 "snippet": r.get("content", ""),
+                "raw_content": r.get("raw_content") or "",
             })
         return results
     except Exception as exc:
@@ -92,6 +94,12 @@ def _searxng_search(query: str, num_results: int) -> list[dict]:
             headers={"User-Agent": "moonshine-research/1.0"},
         )
         resp.raise_for_status()
+        if "application/json" not in resp.headers.get("Content-Type", ""):
+            logger.error(
+                "SearXNG returned non-JSON response — JSON format is probably not enabled. "
+                "Add 'json' to search.formats in searxng-config/settings.yml and restart."
+            )
+            return []
         data = resp.json()
         results = []
         for r in data.get("results", [])[:num_results]:

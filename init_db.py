@@ -55,6 +55,23 @@ CREATE TABLE IF NOT EXISTS failures (
     error_message TEXT,
     created_at    TEXT    NOT NULL
 );
+
+-- FTS5 index over sources: search title, summary, key_points, extracted_text
+CREATE VIRTUAL TABLE IF NOT EXISTS sources_fts USING fts5(
+    title,
+    summary,
+    key_points,
+    extracted_text,
+    content=sources,
+    content_rowid=id
+);
+
+-- FTS5 index over drafts: search the full draft markdown
+CREATE VIRTUAL TABLE IF NOT EXISTS drafts_fts USING fts5(
+    draft_markdown,
+    content=drafts,
+    content_rowid=id
+);
 """
 
 if __name__ == "__main__":

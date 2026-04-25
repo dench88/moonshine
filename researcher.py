@@ -13,12 +13,12 @@ import logging
 import re
 import time
 
-import ollama_client as llm
+import llm_client as llm
 import db
 import search as search_mod
 from fetcher import fetch_and_extract
 from prompts import researcher_prompt, search_query_prompt
-from config import SOURCES_PER_CYCLE, MIN_RELEVANCE_SCORE, MIN_QUALITY_SCORE
+from config import SOURCES_PER_CYCLE, MIN_RELEVANCE_SCORE, MIN_QUALITY_SCORE, MAX_TEXT_CHARS, resolve_model, RESEARCHER_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -63,9 +63,10 @@ def _parse_queries(text: str) -> list[str]:
 
 
 
-def run_researcher(run_id: int, cycle: int, topic: str, next_angles: str) -> int:
+def run_researcher(run_id: int, cycle: int, topic: str, next_angles: str, model: str | None = None) -> int:
     """Run the researcher pass. Returns number of sources successfully accepted."""
-    logger.info("Researcher starting — run=%d cycle=%d", run_id, cycle)
+    model = resolve_model(model or RESEARCHER_MODEL)
+    logger.info("Researcher starting — run=%d cycle=%d model=%s", run_id, cycle, model)
 
     accepted_urls = db.get_accepted_urls(run_id)
     all_summaries = db.get_all_summaries(run_id)
@@ -75,7 +76,7 @@ def run_researcher(run_id: int, cycle: int, topic: str, next_angles: str) -> int
     # --- Ask LLM for search queries ---
     query_prompt = search_query_prompt(topic, cycle, previous_titles, next_angles)
     try:
-        query_response = llm.chat(query_prompt, system=None)
+        query_response = llm.chat(query_prompt, system=None, model=model)
         queries = _parse_queries(query_response)
     except Exception as exc:
         logger.error("LLM failed to generate queries: %s", exc)
@@ -115,12 +116,17 @@ def run_researcher(run_id: int, cycle: int, topic: str, next_angles: str) -> int
 
             seen_in_this_cycle.add(url)
 
-            # --- Fetch ---
-            logger.info("Fetching: %s", url)
-            fetched = fetch_and_extract(url)
-            if not fetched["ok"]:
-                db.log_failure(run_id, cycle, "fetch", url, fetched["error"] or "unknown")
-                continue
+            # --- Get text: use Tavily raw_content if available, else fetch ---
+            raw_content = result.get("raw_content", "")
+            if raw_content and len(raw_content) >= 200:
+                logger.info("Using Tavily raw_content for: %s", url)
+                fetched = {"ok": True, "text": raw_content[:MAX_TEXT_CHARS], "title": result.get("title", ""), "error": None}
+            else:
+                logger.info("Fetching: %s", url)
+                fetched = fetch_and_extract(url)
+                if not fetched["ok"]:
+                    db.log_failure(run_id, cycle, "fetch", url, fetched["error"] or "unknown")
+                    continue
 
             if len(fetched["text"]) < 200:
                 logger.info("Skipping thin content: %s", url)
@@ -136,7 +142,7 @@ def run_researcher(run_id: int, cycle: int, topic: str, next_angles: str) -> int
                 existing_notes_summary=notes_summary,
             )
             try:
-                llm_response = llm.chat(prompt, system=llm.RESEARCHER_SYSTEM)
+                llm_response = llm.chat(prompt, system=llm.RESEARCHER_SYSTEM, model=model)
                 parsed = _parse_researcher_response(llm_response)
             except Exception as exc:
                 logger.error("LLM summarisation failed for %s: %s", url, exc)

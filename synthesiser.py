@@ -8,8 +8,9 @@ from __future__ import annotations
 import logging
 import re
 
-import ollama_client as llm
+import llm_client as llm
 import db
+from config import SYNTHESISER_MODEL, resolve_model
 from prompts import synthesiser_prompt
 
 logger = logging.getLogger(__name__)
@@ -44,12 +45,13 @@ def _parse_synthesiser_response(text: str) -> dict:
     }
 
 
-def run_synthesiser(run_id: int, cycle: int, topic: str) -> dict:
+def run_synthesiser(run_id: int, cycle: int, topic: str, model: str | None = None) -> dict:
     """
     Returns dict with keys: draft, gaps, next_angles.
     May return empty strings if synthesis fails.
     """
-    logger.info("Synthesiser starting — run=%d cycle=%d", run_id, cycle)
+    model = resolve_model(model or SYNTHESISER_MODEL)
+    logger.info("Synthesiser starting — run=%d cycle=%d model=%s", run_id, cycle, model)
 
     summaries = db.get_all_summaries(run_id)
     all_summaries_text = _build_all_summaries_text(summaries)
@@ -65,7 +67,7 @@ def run_synthesiser(run_id: int, cycle: int, topic: str) -> dict:
     )
 
     try:
-        response = llm.chat(prompt, system=llm.SYNTHESISER_SYSTEM)
+        response = llm.chat(prompt, system=llm.SYNTHESISER_SYSTEM, model=model)
     except Exception as exc:
         logger.error("LLM synthesis failed: %s", exc)
         return {"draft": current_draft, "gaps": "", "next_angles": ""}

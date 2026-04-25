@@ -1,3 +1,8 @@
 requests>=2.31.0
+python-dotenv>=1.0.0
 beautifulsoup4>=4.12.0
 lxml>=5.0.0
+datasette>=0.65.0
+# Online model providers (only needed if using anthropic/* or openai/* models)
+anthropic>=0.25.0
+openai>=1.30.0

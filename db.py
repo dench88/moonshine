@@ -107,7 +107,13 @@ def save_source(run_id: int, cycle: int, data: dict) -> int:
                 data.get("status", "accepted"),
             ),
         )
-        return cur.lastrowid
+        source_id = cur.lastrowid
+        conn.execute(
+            "INSERT INTO sources_fts(rowid, title, summary, key_points, extracted_text) VALUES (?, ?, ?, ?, ?)",
+            (source_id, data.get("title", ""), data.get("summary", ""),
+             data.get("key_points", ""), data.get("extracted_text", "")),
+        )
+        return source_id
 
 
 def get_accepted_urls(run_id: int) -> set[str]:
@@ -150,7 +156,12 @@ def save_draft(run_id: int, cycle: int, draft_md: str, gaps: str, next_angles: s
                VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))""",
             (run_id, cycle, draft_md, gaps, next_angles),
         )
-        return cur.lastrowid
+        draft_id = cur.lastrowid
+        conn.execute(
+            "INSERT INTO drafts_fts(rowid, draft_markdown) VALUES (?, ?)",
+            (draft_id, draft_md),
+        )
+        return draft_id
 
 
 def get_latest_draft(run_id: int) -> dict | None:
