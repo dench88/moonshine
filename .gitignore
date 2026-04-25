@@ -10,5 +10,8 @@ topic_loop.db
 outputs/
 logs/
 
+# Personal topic (keep private — copy topic.txt.example to topic.txt)
+topic.txt
+
 # Secrets / local overrides
 .env

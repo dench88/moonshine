@@ -63,7 +63,13 @@ Check the model name and URL in `config.py`.
 
 ### 5. Set your research topic
 
-Edit `topic.txt` — put one research question on one line:
+`topic.txt` is gitignored to keep your topics private. Copy the example and edit it:
+
+```bash
+cp topic.txt.example topic.txt
+```
+
+Then edit `topic.txt` with your research question — one question per file:
 
 ```
 What are the long-term macroeconomic effects of universal basic income?
