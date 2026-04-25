@@ -81,36 +81,32 @@ def update_run_status(run_id: int, status: str, cycle_count: int | None = None):
 # ---------------------------------------------------------------------------
 
 def save_source(run_id: int, cycle: int, data: dict) -> int:
-    cols = [
-        "run_id", "cycle_number", "url", "title", "source_name", "author",
-        "publish_date", "extracted_text_path", "summary", "detailed_summary",
-        "why_relevant", "key_points", "quality_score", "relevance_score",
-        "status", "created_at", "updated_at",
-    ]
-    values = [
-        run_id, cycle,
-        data.get("url", ""),
-        data.get("title", ""),
-        data.get("source_name", ""),
-        data.get("author", ""),
-        data.get("publish_date", ""),
-        data.get("extracted_text_path", ""),
-        data.get("summary", ""),
-        data.get("detailed_summary", ""),
-        data.get("why_relevant", ""),
-        data.get("key_points", ""),
-        data.get("quality_score", 0),
-        data.get("relevance_score", 0),
-        data.get("status", "accepted"),
-        "datetime('now')", "datetime('now')",
-    ]
-    placeholders = ", ".join(
-        ["datetime('now')" if v == "datetime('now')" else "?" for v in values]
-    )
-    bind = [v for v in values if v != "datetime('now')"]
-    sql = f"INSERT INTO sources ({', '.join(cols)}) VALUES ({placeholders})"
     with transaction() as conn:
-        cur = conn.execute(sql, bind)
+        cur = conn.execute(
+            """INSERT INTO sources
+               (run_id, cycle_number, url, title, source_name, author,
+                publish_date, extracted_text_path, summary, detailed_summary,
+                why_relevant, key_points, quality_score, relevance_score,
+                status, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                       datetime('now'), datetime('now'))""",
+            (
+                run_id, cycle,
+                data.get("url", ""),
+                data.get("title", ""),
+                data.get("source_name", ""),
+                data.get("author", ""),
+                data.get("publish_date", ""),
+                data.get("extracted_text_path", ""),
+                data.get("summary", ""),
+                data.get("detailed_summary", ""),
+                data.get("why_relevant", ""),
+                data.get("key_points", ""),
+                data.get("quality_score", 0),
+                data.get("relevance_score", 0),
+                data.get("status", "accepted"),
+            ),
+        )
         return cur.lastrowid
 
 

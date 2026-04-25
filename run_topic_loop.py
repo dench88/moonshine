@@ -81,7 +81,8 @@ def main():
     parser = argparse.ArgumentParser(description="Overnight research loop")
     parser.add_argument("--resume", action="store_true", help="Resume the most recent run")
     parser.add_argument("--run-id", type=int, help="Resume a specific run by ID")
-    parser.add_argument("--max-cycles", type=int, default=MAX_CYCLES)
+    parser.add_argument("--max-cycles", type=int, default=None,
+                        help="Override max cycles (default: use value stored in run)")
     args = parser.parse_args()
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -115,22 +116,28 @@ def main():
                 run = None
 
         if run:
+            if run["status"] == "completed":
+                print(f"WARNING: run {run['id']} is already completed.")
+                print("Use --run-id <N> to resume a specific incomplete run, or start a new one without --resume.")
+                sys.exit(1)
             run_id = run["id"]
             start_cycle = run["cycle_count"] + 1
-            max_cycles = args.max_cycles
+            max_cycles = args.max_cycles if args.max_cycles is not None else run["max_cycles"]
             logger = setup_logging(run_id)
-            logger.info("Resuming run %d from cycle %d (topic: %s)", run_id, start_cycle, topic)
+            logger.info("Resuming run %d from cycle %d of %d (topic: %s)", run_id, start_cycle, max_cycles, topic)
             db.update_run_status(run_id, "running")
         else:
-            run_id = db.create_run(topic, args.max_cycles)
+            effective_max = args.max_cycles if args.max_cycles is not None else MAX_CYCLES
+            run_id = db.create_run(topic, effective_max)
             start_cycle = 1
-            max_cycles = args.max_cycles
+            max_cycles = effective_max
             logger = setup_logging(run_id)
             logger.info("New run %d started (topic: %s)", run_id, topic)
     else:
-        run_id = db.create_run(topic, args.max_cycles)
+        effective_max = args.max_cycles if args.max_cycles is not None else MAX_CYCLES
+        run_id = db.create_run(topic, effective_max)
         start_cycle = 1
-        max_cycles = args.max_cycles
+        max_cycles = effective_max
         logger = setup_logging(run_id)
         logger.info("New run %d started (topic: %s)", run_id, topic)
 
