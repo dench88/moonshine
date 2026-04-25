@@ -10,7 +10,6 @@ For each cycle:
 from __future__ import annotations
 
 import logging
-import os
 import re
 import time
 
@@ -19,7 +18,7 @@ import db
 import search as search_mod
 from fetcher import fetch_and_extract
 from prompts import researcher_prompt, search_query_prompt
-from config import SOURCES_PER_CYCLE, MIN_RELEVANCE_SCORE, MIN_QUALITY_SCORE, OUTPUT_DIR
+from config import SOURCES_PER_CYCLE, MIN_RELEVANCE_SCORE, MIN_QUALITY_SCORE
 
 logger = logging.getLogger(__name__)
 
@@ -62,14 +61,6 @@ def _parse_queries(text: str) -> list[str]:
             queries.append(m.group(1).strip())
     return queries
 
-
-def _save_extracted_text(run_id: int, cycle: int, url: str, text: str) -> str:
-    safe_url = re.sub(r"[^\w]", "_", url)[:60]
-    filename = f"run{run_id}_cycle{cycle}_{safe_url}.txt"
-    path = os.path.join(OUTPUT_DIR, filename)
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(text)
-    return path
 
 
 def run_researcher(run_id: int, cycle: int, topic: str, next_angles: str) -> int:
@@ -136,9 +127,6 @@ def run_researcher(run_id: int, cycle: int, topic: str, next_angles: str) -> int
                 db.log_failure(run_id, cycle, "thin_content", url, "less than 200 chars")
                 continue
 
-            # --- Save raw text ---
-            text_path = _save_extracted_text(run_id, cycle, url, fetched["text"])
-
             # --- LLM summarise ---
             prompt = researcher_prompt(
                 topic=topic,
@@ -176,7 +164,7 @@ def run_researcher(run_id: int, cycle: int, topic: str, next_angles: str) -> int
                 "source_name": result.get("source_name", ""),
                 "author": "",
                 "publish_date": "",
-                "extracted_text_path": text_path,
+                "extracted_text": fetched["text"],
                 "status": "accepted",
                 **parsed,
             }

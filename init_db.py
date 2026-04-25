@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS sources (
     source_name         TEXT,
     author              TEXT,
     publish_date        TEXT,
-    extracted_text_path TEXT,
+    extracted_text      TEXT,
     summary             TEXT,
     detailed_summary    TEXT,
     why_relevant        TEXT,

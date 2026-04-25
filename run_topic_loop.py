@@ -19,7 +19,7 @@ import db
 import researcher
 import synthesiser
 from config import (
-    MAX_CYCLES, OUTPUT_DIR, LOGS_DIR, TOPIC_FILE,
+    MAX_CYCLES, OUTPUT_DIR, REPORTS_DIR, LOGS_DIR, TOPIC_FILE,
 )
 
 # ---------------------------------------------------------------------------
@@ -86,6 +86,7 @@ def main():
     args = parser.parse_args()
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
+    os.makedirs(REPORTS_DIR, exist_ok=True)
     os.makedirs(LOGS_DIR, exist_ok=True)
 
     # --- Read topic ---
@@ -206,10 +207,12 @@ def main():
     logger.info("All %d cycles complete.", max_cycles)
     db.update_run_status(run_id, "completed", cycle_count=max_cycles)
 
-    # Write final report
+    # Write final report to reports subfolder
     final_draft_row = db.get_latest_draft(run_id)
     if final_draft_row and final_draft_row["draft_markdown"]:
-        final_path = write_draft_file(run_id, final_draft_row["draft_markdown"], label="final_report")
+        final_path = os.path.join(REPORTS_DIR, f"run_{run_id}_final_report.md")
+        with open(final_path, "w", encoding="utf-8") as f:
+            f.write(final_draft_row["draft_markdown"])
         logger.info("Final report saved: %s", final_path)
     else:
         logger.warning("No draft available for final report.")

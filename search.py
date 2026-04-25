@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import requests
-from config import SEARCH_PROVIDER, SEARXNG_URL, BRAVE_API_KEY
+from config import SEARCH_PROVIDER, SEARXNG_URL, BRAVE_API_KEY, TAVILY_API_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +18,7 @@ def search(query: str, num_results: int = 5) -> list[dict]:
     """Dispatch to the configured provider."""
     providers = {
         "mock": _mock_search,
+        "tavily": _tavily_search,
         "searxng": _searxng_search,
         "brave": _brave_search,
     }
@@ -35,6 +36,41 @@ def search(query: str, num_results: int = 5) -> list[dict]:
 def _mock_search(query: str, num_results: int) -> list[dict]:
     logger.warning("Mock search in use — returning empty results for: %s", query)
     return []
+
+
+# ---------------------------------------------------------------------------
+# Tavily
+# ---------------------------------------------------------------------------
+
+def _tavily_search(query: str, num_results: int) -> list[dict]:
+    if not TAVILY_API_KEY:
+        logger.error("TAVILY_API_KEY not set")
+        return []
+    try:
+        resp = requests.post(
+            "https://api.tavily.com/search",
+            json={
+                "api_key": TAVILY_API_KEY,
+                "query": query,
+                "num_results": num_results,
+                "search_depth": "basic",
+                "include_answer": False,
+            },
+            timeout=15,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        results = []
+        for r in data.get("results", [])[:num_results]:
+            results.append({
+                "url": r.get("url", ""),
+                "title": r.get("title", ""),
+                "snippet": r.get("content", ""),
+            })
+        return results
+    except Exception as exc:
+        logger.error("Tavily search failed: %s", exc)
+        return []
 
 
 # ---------------------------------------------------------------------------

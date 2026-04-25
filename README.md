@@ -1,3 +1,5 @@
+# This is a public repo!
+
 # Moonshine — Overnight Research Loop
 
 A simple, durable two-role research system that runs all night, searches the web,
@@ -107,18 +109,22 @@ python run_topic_loop.py --max-cycles 60
 
 ## Outputs
 
-All outputs are saved under `outputs/`:
+Working files are saved under `outputs/`:
 
 | File | Contents |
 |------|----------|
 | `run_N_notes.md` | All accepted sources with summaries, key points, scores |
 | `run_N_draft.md` | Latest draft report (updated every cycle) |
+
+Final reports are saved under `outputs/reports/`:
+
+| File | Contents |
+|------|----------|
 | `run_N_final_report.md` | Final report written when the run completes |
-| `run_N_cycleM_<url>.txt` | Raw extracted text from each fetched page |
 
 Logs are saved under `logs/run_N.log`.
 
-The SQLite database `topic_loop.db` holds the full structured state.
+The SQLite database `topic_loop.db` holds the full structured state, including the full extracted text of each accepted source.
 
 ---
 
@@ -134,7 +140,7 @@ Edit `config.py` to change:
 | `SOURCES_PER_CYCLE` | `2` | Sources to accept per cycle |
 | `MIN_RELEVANCE_SCORE` | `3` | Minimum LLM relevance score (1–10) |
 | `MIN_QUALITY_SCORE` | `3` | Minimum LLM quality score (1–10) |
-| `SEARCH_PROVIDER` | `mock` | Search backend (see below) |
+| `SEARCH_PROVIDER` | `tavily` | Search backend (see below) |
 | `MAX_TEXT_CHARS` | `12000` | Characters to extract from each page |
 
 ---
@@ -143,7 +149,21 @@ Edit `config.py` to change:
 
 The search layer lives in `search.py`. Set `SEARCH_PROVIDER` in `config.py` to one of:
 
-### SearXNG (self-hosted, recommended)
+### Tavily (recommended)
+
+Get an API key at https://tavily.com/, then:
+
+```bash
+export TAVILY_API_KEY=your_key_here
+```
+
+And in `config.py`:
+
+```python
+SEARCH_PROVIDER = "tavily"
+```
+
+### SearXNG (self-hosted)
 
 ```bash
 # Run SearXNG locally with Docker

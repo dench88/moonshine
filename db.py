@@ -85,7 +85,7 @@ def save_source(run_id: int, cycle: int, data: dict) -> int:
         cur = conn.execute(
             """INSERT INTO sources
                (run_id, cycle_number, url, title, source_name, author,
-                publish_date, extracted_text_path, summary, detailed_summary,
+                publish_date, extracted_text, summary, detailed_summary,
                 why_relevant, key_points, quality_score, relevance_score,
                 status, created_at, updated_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
@@ -97,7 +97,7 @@ def save_source(run_id: int, cycle: int, data: dict) -> int:
                 data.get("source_name", ""),
                 data.get("author", ""),
                 data.get("publish_date", ""),
-                data.get("extracted_text_path", ""),
+                data.get("extracted_text", ""),
                 data.get("summary", ""),
                 data.get("detailed_summary", ""),
                 data.get("why_relevant", ""),
