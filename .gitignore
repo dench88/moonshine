@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+
+# Runtime artifacts
+topic_loop.db
+outputs/
+logs/
+
+# Secrets / local overrides
+.env
