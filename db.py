@@ -2,12 +2,30 @@ import sqlite3
 import contextlib
 from config import DB_PATH
 
+_migrated = False
+
 
 def get_conn():
+    global _migrated
     conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
+    if not _migrated:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS token_usage (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                run_id        INTEGER NOT NULL REFERENCES runs(id),
+                cycle         INTEGER NOT NULL,
+                role          TEXT    NOT NULL,
+                model         TEXT    NOT NULL,
+                input_tokens  INTEGER NOT NULL DEFAULT 0,
+                output_tokens INTEGER NOT NULL DEFAULT 0,
+                created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
+            )
+        """)
+        conn.commit()
+        _migrated = True
     return conn
 
 
@@ -179,6 +197,39 @@ def get_latest_draft(run_id: int) -> dict | None:
 # ---------------------------------------------------------------------------
 # Failures
 # ---------------------------------------------------------------------------
+
+def log_token_usage(run_id: int, cycle: int, role: str, model: str,
+                    input_tokens: int, output_tokens: int):
+    conn = get_conn()
+    try:
+        conn.execute(
+            """INSERT INTO token_usage (run_id, cycle, role, model, input_tokens, output_tokens)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (run_id, cycle, role, model, input_tokens, output_tokens),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_token_usage_summary(run_id: int) -> list[dict]:
+    """Return total input/output tokens grouped by role and model for a run."""
+    conn = get_conn()
+    try:
+        rows = conn.execute(
+            """SELECT role, model,
+                      SUM(input_tokens)  AS input_tokens,
+                      SUM(output_tokens) AS output_tokens
+               FROM token_usage
+               WHERE run_id = ?
+               GROUP BY role, model
+               ORDER BY role""",
+            (run_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
 
 def log_failure(run_id: int, cycle: int, stage: str, url: str, error: str):
     conn = get_conn()

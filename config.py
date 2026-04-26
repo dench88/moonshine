@@ -39,12 +39,24 @@ def resolve_model(name: str) -> str:
     """Expand a short alias to its full provider/model string, or pass through as-is."""
     return MODEL_ALIASES.get(name.lower(), name)
 
+
+# Pricing per million tokens: (input $/M, output $/M).
+# Local Ollama models are not listed here — absence = free.
+# Update these if provider pricing changes.
+MODEL_PRICING: dict[str, tuple[float, float]] = {
+    "anthropic/claude-sonnet-4-6":          (3.00,  15.00),
+    "anthropic/claude-haiku-4-5-20251001":  (0.80,   4.00),
+    "openai/gpt-4o":                        (2.50,  10.00),
+    "openai/gpt-4o-mini":                   (0.15,   0.60),
+    "deepseek/deepseek-chat":               (0.27,   1.10),
+}
+
 # API keys for online providers (read from environment)
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 OPENAI_API_KEY    = os.environ.get("OPENAI_API_KEY", "")
 DEEPSEEK_API_KEY  = os.environ.get("DEEPSEEK_API_KEY", "")
 
-MAX_CYCLES = 50
+MAX_CYCLES = 5
 SOURCES_PER_CYCLE = 2
 RETRY_COUNT = 2
 

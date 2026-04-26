@@ -45,7 +45,8 @@ def _parse_synthesiser_response(text: str) -> dict:
     }
 
 
-def run_synthesiser(run_id: int, cycle: int, topic: str, model: str | None = None) -> dict:
+def run_synthesiser(run_id: int, cycle: int, topic: str,
+                    model: str | None = None, keep_alive: int | None = None) -> dict:
     """
     Returns dict with keys: draft, gaps, next_angles.
     May return empty strings if synthesis fails.
@@ -67,12 +68,14 @@ def run_synthesiser(run_id: int, cycle: int, topic: str, model: str | None = Non
     )
 
     try:
-        response = llm.chat(prompt, system=llm.SYNTHESISER_SYSTEM, model=model)
+        resp = llm.chat(prompt, system=llm.SYNTHESISER_SYSTEM, model=model, keep_alive=keep_alive)
+        db.log_token_usage(run_id, cycle, "synthesiser", model,
+                           resp.input_tokens, resp.output_tokens)
     except Exception as exc:
         logger.error("LLM synthesis failed: %s", exc)
         return {"draft": current_draft, "gaps": "", "next_angles": ""}
 
-    parsed = _parse_synthesiser_response(response)
+    parsed = _parse_synthesiser_response(resp.text)
 
     if not parsed["draft"]:
         logger.warning("Synthesiser returned empty draft — keeping previous draft")

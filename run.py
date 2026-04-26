@@ -20,7 +20,7 @@ import researcher
 import synthesiser
 from config import (
     MAX_CYCLES, OUTPUT_DIR, REPORTS_DIR, LOGS_DIR, TOPIC_FILE,
-    MODEL_ALIASES, resolve_model, RESEARCHER_MODEL, SYNTHESISER_MODEL,
+    MODEL_ALIASES, resolve_model, RESEARCHER_MODEL, SYNTHESISER_MODEL, MODEL_PRICING,
 )
 
 # ---------------------------------------------------------------------------
@@ -83,6 +83,52 @@ def write_draft_file(run_id: int, draft: str, label: str = "draft") -> str:
 
 
 # ---------------------------------------------------------------------------
+# Cost summary
+# ---------------------------------------------------------------------------
+
+def print_cost_summary(run_id: int, max_cycles: int):
+    rows = db.get_token_usage_summary(run_id)
+    if not rows:
+        return
+
+    SEP  = "═" * 72
+    LINE = "─" * 72
+
+    print(f"\n{SEP}")
+    print(f"  Cost summary — Run {run_id} ({max_cycles} cycles)")
+    print(SEP)
+    print(f"  {'Role':<14} {'Model':<34} {'Input':>10}  {'Output':>10}  {'$/1M in':>8}  {'$/1M out':>9}  {'Cost':>8}")
+    print(LINE)
+
+    total_in = total_out = total_cost = 0.0
+
+    for r in rows:
+        model   = r["model"]
+        role    = r["role"].capitalize()
+        tok_in  = r["input_tokens"]
+        tok_out = r["output_tokens"]
+        total_in  += tok_in
+        total_out += tok_out
+
+        pricing = MODEL_PRICING.get(model)
+        if pricing:
+            price_in, price_out = pricing
+            cost = (tok_in / 1_000_000) * price_in + (tok_out / 1_000_000) * price_out
+            total_cost += cost
+            price_str = f"${price_in:.2f}  ${price_out:>7.2f}  ${cost:>7.4f}"
+        else:
+            price_str = f"{'—':>8}  {'—':>9}  {'local':>8}"
+
+        short_model = model.split("/", 1)[1] if "/" in model else model
+        print(f"  {role:<14} {short_model:<34} {tok_in:>10,}  {tok_out:>10,}  {price_str}")
+
+    print(LINE)
+    cost_str = f"${total_cost:.4f}" if total_cost else "local"
+    print(f"  {'Total':<14} {'':34} {int(total_in):>10,}  {int(total_out):>10,}  {'':>8}  {'':>9}  {cost_str:>8}")
+    print(SEP + "\n")
+
+
+# ---------------------------------------------------------------------------
 # Topic file
 # ---------------------------------------------------------------------------
 
@@ -107,10 +153,22 @@ def read_topics() -> list[str]:
 def run_single(topic: str, run_id: int, start_cycle: int, max_cycles: int,
                researcher_model: str | None = None, synthesiser_model: str | None = None):
     logger = setup_logging(run_id)
+    r_model = resolve_model(researcher_model or RESEARCHER_MODEL)
+    s_model = resolve_model(synthesiser_model or SYNTHESISER_MODEL)
+
+    # If both roles use different Ollama models, tell Ollama to unload each model
+    # immediately after every call. This prevents the first model from staying
+    # resident in VRAM when the second model loads, which would cause a CPU spill
+    # and inference times slow enough to hit the 300s timeout.
+    keep_alive: int | None = None
+    if r_model != s_model and r_model.startswith("ollama/") and s_model.startswith("ollama/"):
+        keep_alive = 0
+        logger.info("Different Ollama models detected — setting keep_alive=0 to prevent VRAM spill")
+
     logger.info("Run %d — topic: %s", run_id, topic)
     logger.info("Max cycles: %d", max_cycles)
-    logger.info("Researcher model: %s", resolve_model(researcher_model or RESEARCHER_MODEL))
-    logger.info("Synthesiser model: %s", resolve_model(synthesiser_model or SYNTHESISER_MODEL))
+    logger.info("Researcher model: %s", r_model)
+    logger.info("Synthesiser model: %s", s_model)
 
     latest_draft = db.get_latest_draft(run_id)
     next_angles = latest_draft["next_search_angles"] if latest_draft else ""
@@ -129,6 +187,7 @@ def run_single(topic: str, run_id: int, start_cycle: int, max_cycles: int,
                 topic=topic,
                 next_angles=next_angles,
                 model=researcher_model,
+                keep_alive=keep_alive,
             )
         except Exception as exc:
             logger.error("Researcher pass crashed in cycle %d: %s", cycle, exc)
@@ -148,6 +207,7 @@ def run_single(topic: str, run_id: int, start_cycle: int, max_cycles: int,
                 cycle=cycle,
                 topic=topic,
                 model=synthesiser_model,
+                keep_alive=keep_alive,
             )
             next_angles = synth_result.get("next_angles", "")
         except Exception as exc:
@@ -178,6 +238,8 @@ def run_single(topic: str, run_id: int, start_cycle: int, max_cycles: int,
     notes_path = write_notes_file(run_id, topic)
     logger.info("Final notes saved: %s", notes_path)
     logger.info("Run %d completed successfully.", run_id)
+
+    print_cost_summary(run_id, max_cycles)
 
 
 # ---------------------------------------------------------------------------

@@ -139,6 +139,22 @@ You can also pass a full `provider/model-name` string if you want a model not in
 python run.py --researcher gptoss --synthesiser claude
 ```
 
+### VRAM management with two different local models
+
+If both roles use **different** Ollama models, Moonshine automatically adds `keep_alive=0` to every Ollama request. This tells Ollama to unload the model from VRAM immediately after each call, so the next model always loads into a clean GPU.
+
+Without this, Ollama keeps each model resident in VRAM for 5 minutes (its default), so when the Synthesiser's model loads while the Researcher's model is still warm, both compete for VRAM — the larger one spills to CPU RAM and inference slows to a crawl, hitting the timeout.
+
+The trade-off: each role pays a ~2–3 second reload cost at the start of its turn. This is negligible compared to inference time.
+
+This is automatic — no configuration needed. You will see a log line at the start of each run confirming it is active:
+
+```
+Different Ollama models detected — setting keep_alive=0 to prevent VRAM spill
+```
+
+If both roles use the same model, or either role uses a cloud model, this behaviour is not triggered.
+
 ### Resume an interrupted run
 
 ```bash

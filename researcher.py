@@ -63,7 +63,8 @@ def _parse_queries(text: str) -> list[str]:
 
 
 
-def run_researcher(run_id: int, cycle: int, topic: str, next_angles: str, model: str | None = None) -> int:
+def run_researcher(run_id: int, cycle: int, topic: str, next_angles: str,
+                   model: str | None = None, keep_alive: int | None = None) -> int:
     """Run the researcher pass. Returns number of sources successfully accepted."""
     model = resolve_model(model or RESEARCHER_MODEL)
     logger.info("Researcher starting — run=%d cycle=%d model=%s", run_id, cycle, model)
@@ -76,8 +77,10 @@ def run_researcher(run_id: int, cycle: int, topic: str, next_angles: str, model:
     # --- Ask LLM for search queries ---
     query_prompt = search_query_prompt(topic, cycle, previous_titles, next_angles)
     try:
-        query_response = llm.chat(query_prompt, system=None, model=model)
-        queries = _parse_queries(query_response)
+        query_resp = llm.chat(query_prompt, system=None, model=model, keep_alive=keep_alive)
+        db.log_token_usage(run_id, cycle, "researcher", model,
+                           query_resp.input_tokens, query_resp.output_tokens)
+        queries = _parse_queries(query_resp.text)
     except Exception as exc:
         logger.error("LLM failed to generate queries: %s", exc)
         db.log_failure(run_id, cycle, "query_generation", "", str(exc))
@@ -142,8 +145,10 @@ def run_researcher(run_id: int, cycle: int, topic: str, next_angles: str, model:
                 existing_notes_summary=notes_summary,
             )
             try:
-                llm_response = llm.chat(prompt, system=llm.RESEARCHER_SYSTEM, model=model)
-                parsed = _parse_researcher_response(llm_response)
+                llm_resp = llm.chat(prompt, system=llm.RESEARCHER_SYSTEM, model=model, keep_alive=keep_alive)
+                db.log_token_usage(run_id, cycle, "researcher", model,
+                                   llm_resp.input_tokens, llm_resp.output_tokens)
+                parsed = _parse_researcher_response(llm_resp.text)
             except Exception as exc:
                 logger.error("LLM summarisation failed for %s: %s", url, exc)
                 db.log_failure(run_id, cycle, "llm_summarise", url, str(exc))
